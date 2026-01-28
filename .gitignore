@@ -1,0 +1,7 @@
+venv_orbbec/
+__pycache__/
+*.pyc
+.vscode/
+typings/
+pyorbbecsdk/
+
