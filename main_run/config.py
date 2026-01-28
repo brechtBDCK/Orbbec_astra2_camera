@@ -3,39 +3,19 @@
 Edit these values directly. This keeps the script simple and avoids CLI args.
 """
 
+from pyorbbecsdk import OBHoleFillingMode
+
 # ============================================================================
 # High-level behavior
 # ============================================================================
-# MODE = "depth"  -> view depth (and optional color) frames
-# MODE = "pointcloud" -> generate point clouds
-MODE = "depth"
+# MODE = "depth_with_color"      -> view depth + color (RGB-D)
+# MODE = "pointcloud_with_color" -> generate RGB point clouds
+MODE = "depth_with_color"
 
-# If LIVE=True, open OpenCV windows and update continuously.
-# If LIVE=False, run once and print a summary.
-LIVE = True
-
-# Set True to print all available profiles then exit.
-LIST_PROFILES = False
-
-# Print camera info at startup.
-PRINT_DEVICE_INFO = True
-
-# Print available profiles (without exiting).
-PRINT_AVAILABLE_PROFILES = False
-
-# Print available (recommended) filters for this device.
-PRINT_AVAILABLE_FILTERS = False
-
-
-# ============================================================================
-# Stream selection
-# ============================================================================
-# Color stream is optional.
-ENABLE_COLOR = False
-
-# If True, align depth to color. This requires color stream enabled.
-ALIGN_DEPTH_TO_COLOR = False
-
+# Single switch for printing info offline and exiting.
+# When True: prints device info, profiles, and recommended filters, then exits.
+# When False: runs live mode.
+PRINT_INFO_OFFLINE = False
 
 # ============================================================================
 # Profile selection
@@ -58,32 +38,55 @@ COLOR_FORMAT_NAME = None    # e.g., "RGB", "MJPG", "NV12"
 # ============================================================================
 # Depth filters (software post-processing)
 # ============================================================================
-# Use device recommended filters OR select individual filters below.
-USE_RECOMMENDED_FILTERS = False
+# --- DecimationFilter ---
 ENABLE_DECIMATION = False
-ENABLE_TEMPORAL = False
+DECIMATION_SCALE_VALUE = None  # e.g., 2, 4, 8 (None = SDK default)
+# --- DisparityTransform ---
+ENABLE_DISPARITY = True
+
+# --- SpatialAdvancedFilter ---
 ENABLE_SPATIAL = False
+# Higher alpha/diff/magnitude/radius => stronger smoothing (but more blur).
+SPATIAL_ALPHA = 0.5
+SPATIAL_DIFF_THRESHOLD = 160
+SPATIAL_MAGNITUDE = 1
+SPATIAL_RADIUS = 1
+
+# --- TemporalFilter ---
+ENABLE_TEMPORAL = False
+# Lower diff/weight => more smoothing (but more lag).
+TEMPORAL_DIFF_SCALE = 0.1
+TEMPORAL_WEIGHT = 0.4
+
+# --- HoleFillingFilter ---
 ENABLE_HOLE_FILLING = False
+HOLE_FILLING_MODE = OBHoleFillingMode.NEAREST  # FURTHEST / NEAREST / TOP
 
+# --- ThresholdFilter ---
+ENABLE_THRESHOLD = True
 # Optional depth range clamp (units depend on device; often mm scale in Y16)
-THRESHOLD_MIN = None
-THRESHOLD_MAX = None
+THRESHOLD_MIN = 200  #20cm
+THRESHOLD_MAX = 1000 #1m
 
 
 # ============================================================================
-# Visualization / loop behavior
+# Display options
 # ============================================================================
-TIMEOUT_MS = 100
-MAX_VIS_M = 4.0
+SHOW_WINDOW = True
 PRINT_INTERVAL_S = 1.0
+TIMEOUT_MS = 100
+MIN_DEPTH_MM = 20
+MAX_DEPTH_MM = 10000
+WINDOW_NAME = "Depth"
+WINDOW_POS_X = 50
+WINDOW_POS_Y = 50
 
+# If True, scale colors per-frame using valid depth range for better gradients.
+AUTO_SCALE = True #Set to true when using the threshold filter to see depth variations better.
 
 # ============================================================================
 # Point-cloud options
 # ============================================================================
-# If True and color stream is available, generate RGB point clouds.
-POINTCLOUD_WITH_COLOR = True
-
 # Normalize RGB colors in the SDK point cloud filter
 POINTCLOUD_COLOR_NORMALIZE = True
 

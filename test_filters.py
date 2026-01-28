@@ -2,7 +2,6 @@
 
 Edit the flags below to turn filters on/off.
 """
-
 import time
 import numpy as np
 import cv2
@@ -11,8 +10,10 @@ from pyorbbecsdk import (
     Config,
     DisparityTransform,
     HoleFillingFilter,
+    OBHoleFillingMode,
     OBFormat,
     OBSensorType,
+    OBSpatialAdvancedFilterParams,
     Pipeline,
     SpatialAdvancedFilter,
     TemporalFilter,
@@ -27,30 +28,50 @@ from pyorbbecsdk import (
 ENABLE_DISPARITY = True
 
 # --- SpatialAdvancedFilter --- 
-ENABLE_SPATIAL = True
-# (No simple parameters exposed here in the Python binding.)
+ENABLE_SPATIAL = False
+# SpatialAdvancedFilter parameters (see Orbbec docs):
+# - SPATIAL_ALPHA: smoothing strength. Higher = smoother (more blur), lower = preserves edges.
+# - SPATIAL_DIFF_THRESHOLD: edge threshold. Higher = more smoothing across edges.
+# - SPATIAL_MAGNITUDE: iteration count. Higher = stronger smoothing, more compute.
+# - SPATIAL_RADIUS: neighborhood size. Higher = stronger hole filling/smoothing.
+SPATIAL_ALPHA = 0.5
+SPATIAL_DIFF_THRESHOLD = 160
+SPATIAL_MAGNITUDE = 1
+SPATIAL_RADIUS = 1
 
 # --- TemporalFilter ---
 ENABLE_TEMPORAL = True
-# (No simple parameters exposed here in the Python binding.)
+# TemporalFilter parameters:
+# - TEMPORAL_DIFF_SCALE: allowed inter-frame depth change. Lower = more stable, higher = more responsive.
+# - TEMPORAL_WEIGHT: weight of current frame. Higher = shorter memory, lower = longer memory (smoother).
+TEMPORAL_DIFF_SCALE = 0.1
+TEMPORAL_WEIGHT = 0.4
 
 # --- HoleFillingFilter ---
 ENABLE_HOLE_FILLING = False
-# (No simple parameters exposed here in the Python binding.)
+# HoleFillingFilter mode:
+# - FURTHEST: fill with farthest neighbor (preserves background)
+# - NEAREST: fill with nearest neighbor (preserves foreground)
+# - TOP: fill with top (up) neighbor
+HOLE_FILLING_MODE = OBHoleFillingMode.NEAREST  # FURTHEST / NEAREST / TOP
 
 # --- ThresholdFilter (min/max depth clamp, in millimeters) ---
 ENABLE_THRESHOLD = True
 THRESHOLD_MIN = 200 #20cm
 THRESHOLD_MAX = 1000 #100cm
 
+# --- Display options ---
 SHOW_WINDOW = True
 PRINT_INTERVAL_S = 1.0
 TIMEOUT_MS = 100
 MIN_DEPTH_MM = 20
 MAX_DEPTH_MM = 10000
+WINDOW_NAME = "Depth"
+WINDOW_POS_X = 50
+WINDOW_POS_Y = 50
 
 # If True, scale colors per-frame using valid depth range for better gradients.
-AUTO_SCALE = True #Set to true when using the threshold filter to see depth variations better.
+AUTO_SCALE = False #Set to true when using the threshold filter to see depth variations better.
 
 # ============================================================================
 # Time sync (helps reduce timestamp anomaly warnings)
@@ -103,16 +124,33 @@ def main():
         except Exception as exc:
             print(f"Time sync failed: {exc}")
 
+    # Fix window position (avoids random placement)
+    if SHOW_WINDOW:
+        cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
+        cv2.moveWindow(WINDOW_NAME, WINDOW_POS_X, WINDOW_POS_Y)
+
     # Build filter chain based on toggles
     filters = []
     if ENABLE_DISPARITY:
         filters.append(DisparityTransform())
     if ENABLE_SPATIAL:
-        filters.append(SpatialAdvancedFilter())
+        sf = SpatialAdvancedFilter()
+        params = OBSpatialAdvancedFilterParams()
+        params.alpha = float(SPATIAL_ALPHA)
+        params.disp_diff = int(SPATIAL_DIFF_THRESHOLD)
+        params.magnitude = int(SPATIAL_MAGNITUDE)
+        params.radius = int(SPATIAL_RADIUS)
+        sf.set_filter_params(params)
+        filters.append(sf)
     if ENABLE_TEMPORAL:
-        filters.append(TemporalFilter())
+        tf = TemporalFilter()
+        tf.set_diff_scale(float(TEMPORAL_DIFF_SCALE))
+        tf.set_weight(float(TEMPORAL_WEIGHT))
+        filters.append(tf)
     if ENABLE_HOLE_FILLING:
-        filters.append(HoleFillingFilter())
+        hf = HoleFillingFilter()
+        hf.set_filling_mode(HOLE_FILLING_MODE)
+        filters.append(hf)
     if ENABLE_THRESHOLD:
         tf = ThresholdFilter()
         tf.set_value_range(int(THRESHOLD_MIN), int(THRESHOLD_MAX))
@@ -179,7 +217,7 @@ def main():
                     depth_vis = np.clip(depth_mm, 0, MAX_DEPTH_MM)
                     depth_8u = (depth_vis / MAX_DEPTH_MM * 255).astype(np.uint8)
                 depth_color = cv2.applyColorMap(depth_8u, cv2.COLORMAP_JET)
-                cv2.imshow("Depth", depth_color)
+                cv2.imshow(WINDOW_NAME, depth_color)
                 key = cv2.waitKey(1)
                 if key in (27, ord('q')):
                     break

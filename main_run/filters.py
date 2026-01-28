@@ -8,8 +8,10 @@ from typing import Iterable
 
 from pyorbbecsdk import (
     DecimationFilter,
+    DisparityTransform,
     HoleFillingFilter,
     OBSensorType,
+    OBSpatialAdvancedFilterParams,
     Pipeline,
     SpatialAdvancedFilter,
     TemporalFilter,
@@ -30,29 +32,44 @@ def build_depth_filters(pipeline: Pipeline) -> DepthFilterBundle:
     filters: list = []
     description: list[str] = []
 
-    if cfg.USE_RECOMMENDED_FILTERS:
-        device = pipeline.get_device()
-        depth_sensor = device.get_sensor(OBSensorType.DEPTH_SENSOR)
-        recommended = list(depth_sensor.get_recommended_filters())
-        for f in recommended:
-            filters.append(f)
-            try:
-                description.append(f"{f.get_name()} (enabled={f.is_enabled()})")
-            except Exception:
-                description.append(str(f))
-        return DepthFilterBundle(filters, description)
-
     if cfg.ENABLE_DECIMATION:
-        filters.append(DecimationFilter())
-        description.append("DecimationFilter")
+        df = DecimationFilter()
+        scale_note = ""
+        if cfg.DECIMATION_SCALE_VALUE is not None:
+            try:
+                scale_value = int(cfg.DECIMATION_SCALE_VALUE)
+                df.set_scale_value(scale_value)
+                scale_note = f" (scale={scale_value})"
+            except Exception:
+                pass
+        filters.append(df)
+        description.append(f"DecimationFilter{scale_note}")
+    if cfg.ENABLE_DISPARITY:
+        filters.append(DisparityTransform())
+        description.append("DisparityTransform")
     if cfg.ENABLE_TEMPORAL:
-        filters.append(TemporalFilter())
+        tf = TemporalFilter()
+        tf.set_diff_scale(float(cfg.TEMPORAL_DIFF_SCALE))
+        tf.set_weight(float(cfg.TEMPORAL_WEIGHT))
+        filters.append(tf)
         description.append("TemporalFilter")
     if cfg.ENABLE_SPATIAL:
-        filters.append(SpatialAdvancedFilter())
+        sf = SpatialAdvancedFilter()
+        params = OBSpatialAdvancedFilterParams()
+        params.alpha = float(cfg.SPATIAL_ALPHA)
+        params.disp_diff = int(cfg.SPATIAL_DIFF_THRESHOLD)
+        params.magnitude = int(cfg.SPATIAL_MAGNITUDE)
+        params.radius = int(cfg.SPATIAL_RADIUS)
+        sf.set_filter_params(params)
+        filters.append(sf)
         description.append("SpatialAdvancedFilter")
     if cfg.ENABLE_HOLE_FILLING:
-        filters.append(HoleFillingFilter())
+        hf = HoleFillingFilter()
+        try:
+            hf.set_filling_mode(cfg.HOLE_FILLING_MODE)
+        except Exception:
+            pass
+        filters.append(hf)
         description.append("HoleFillingFilter")
 
     if cfg.THRESHOLD_MIN is not None or cfg.THRESHOLD_MAX is not None:

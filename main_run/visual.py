@@ -65,6 +65,20 @@ def depth_frame_to_meters(depth_frame) -> np.ndarray | None:
     return depth_raw.astype(np.float32) * float(scale)
 
 
+def depth_frame_to_mm(depth_frame) -> np.ndarray | None:
+    """Convert a Y16 depth frame into millimeters as uint16 (SDK-style)."""
+    if depth_frame is None:
+        return None
+    if depth_frame.get_format() != OBFormat.Y16:
+        return None
+    width = depth_frame.get_width()
+    height = depth_frame.get_height()
+    scale = depth_frame.get_depth_scale()
+    depth_raw = np.frombuffer(depth_frame.get_data(), dtype=np.uint16).reshape((height, width))
+    depth_mm = depth_raw.astype(np.float32) * float(scale)
+    return depth_mm.astype(np.uint16)
+
+
 def depth_to_colormap(depth_m: np.ndarray, max_vis_m: float) -> np.ndarray:
     """Render depth as a simple color map for quick visualization."""
     clipped = np.clip(depth_m, 0.0, max_vis_m)

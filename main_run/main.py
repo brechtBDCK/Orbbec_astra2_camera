@@ -27,10 +27,7 @@ from main_run.pointcloud import (
     summarize_pointcloud,
 )
 from main_run.profiles import choose_video_profile, list_video_profiles
-from main_run.visual import color_frame_to_bgr, depth_frame_to_meters, depth_to_colormap
-
-
-ESC_KEY = 27
+from main_run.visual import color_frame_to_bgr, depth_frame_to_mm, depth_frame_to_meters, depth_to_colormap
 
 
 def print_device_info(pipeline: Pipeline) -> None:
@@ -66,18 +63,31 @@ def summarize_depth(depth_m):
 
 def main() -> int:
     """Program entry. Returns a process exit code."""
-    if cfg.MODE not in {"depth", "pointcloud"}:
+    if cfg.MODE not in {"depth_with_color", "pointcloud_with_color"}:
         print(f"Unsupported MODE: {cfg.MODE}")
         return 2
 
     pipeline = Pipeline()
+    live = not cfg.PRINT_INFO_OFFLINE
 
-    if cfg.LIST_PROFILES:
-        # Handy for finding profile indexes you want to select in config.py
+    if cfg.PRINT_INFO_OFFLINE:
+        # Print everything and exit (no live run).
+        print_device_info(pipeline)
         list_video_profiles(pipeline, OBSensorType.DEPTH_SENSOR, "Depth")
         list_video_profiles(pipeline, OBSensorType.COLOR_SENSOR, "Color")
         list_video_profiles(pipeline, OBSensorType.LEFT_IR_SENSOR, "Left IR")
         list_video_profiles(pipeline, OBSensorType.RIGHT_IR_SENSOR, "Right IR")
+        try:
+            depth_sensor = pipeline.get_device().get_sensor(OBSensorType.DEPTH_SENSOR)
+            rec = list(depth_sensor.get_recommended_filters())
+            print("\nAvailable (recommended) filters:")
+            for f in rec:
+                try:
+                    print(f"  - {f.get_name()} (enabled={f.is_enabled()})")
+                except Exception:
+                    print(f"  - {f}")
+        except Exception as exc:
+            print(f"\nAvailable filters: unable to query ({exc})")
         return 0
 
     config = Config()
@@ -102,10 +112,8 @@ def main() -> int:
         print(f"Failed to configure depth stream: {exc}")
         return 1
 
-    # Color is optional, but required for alignment and RGB point clouds.
-    want_color = bool(
-        cfg.ENABLE_COLOR or cfg.ALIGN_DEPTH_TO_COLOR or (cfg.MODE == "pointcloud" and cfg.POINTCLOUD_WITH_COLOR)
-    )
+    # Color is always required in these modes.
+    want_color = True
     have_color = False
     if want_color:
         try:
@@ -141,16 +149,6 @@ def main() -> int:
         return 1
 
     try:
-        if cfg.PRINT_DEVICE_INFO:
-            print_device_info(pipeline)
-
-        if cfg.PRINT_AVAILABLE_PROFILES:
-            # Lists all profiles the device reports for each sensor.
-            list_video_profiles(pipeline, OBSensorType.DEPTH_SENSOR, "Depth")
-            list_video_profiles(pipeline, OBSensorType.COLOR_SENSOR, "Color")
-            list_video_profiles(pipeline, OBSensorType.LEFT_IR_SENSOR, "Left IR")
-            list_video_profiles(pipeline, OBSensorType.RIGHT_IR_SENSOR, "Right IR")
-
         depth_filters = build_depth_filters(pipeline)
         if depth_filters.description:
             print("\nDepth filters:")
@@ -159,33 +157,14 @@ def main() -> int:
         else:
             print("\nDepth filters: none")
 
-        if cfg.PRINT_AVAILABLE_FILTERS:
-            # Print the device's recommended post-processing filters.
-            try:
-                depth_sensor = pipeline.get_device().get_sensor(OBSensorType.DEPTH_SENSOR)
-                rec = list(depth_sensor.get_recommended_filters())
-                print("\nAvailable (recommended) filters:")
-                for f in rec:
-                    try:
-                        print(f"  - {f.get_name()} (enabled={f.is_enabled()})")
-                    except Exception:
-                        print(f"  - {f}")
-            except Exception as exc:
-                print(f"\nAvailable filters: unable to query ({exc})")
-
-        # Depth->color alignment (recommended for RGB point clouds)
-        want_align = bool(
-            cfg.ALIGN_DEPTH_TO_COLOR or (cfg.MODE == "pointcloud" and cfg.POINTCLOUD_WITH_COLOR and have_color)
-        )
-        align_filter = AlignFilter(OBStreamType.COLOR_STREAM) if (want_align and have_color) else None
-        if want_align and not have_color:
-            print("Alignment requested but color stream is not available.")
-        elif align_filter is not None and cfg.MODE == "pointcloud" and cfg.POINTCLOUD_WITH_COLOR:
-            print("Using depth->color alignment for RGB point clouds.")
+        # Depth->color alignment is always on.
+        align_filter = AlignFilter(OBStreamType.COLOR_STREAM) if have_color else None
+        if not have_color:
+            print("Color stream unavailable; cannot align depth to color.")
 
         point_cloud_filter = None
         warned_rgb_with_filters = False
-        if cfg.MODE == "pointcloud":
+        if cfg.MODE == "pointcloud_with_color":
             # PointCloudFilter needs camera params to correctly scale output points.
             point_cloud_filter = create_pointcloud_filter(pipeline)
             if cfg.POINTCLOUD_SAVE_PLY:
@@ -209,14 +188,32 @@ def main() -> int:
                 continue
             depth_frame = apply_depth_filters(depth_frame, depth_filters.filters)
 
-            if cfg.MODE == "depth":
-                depth_m = depth_frame_to_meters(depth_frame)
-                if depth_m is None:
+            if cfg.MODE == "depth_with_color":
+                depth_mm = depth_frame_to_mm(depth_frame)
+                if depth_mm is None:
                     continue
 
-                if cfg.LIVE:
+                # Clamp to a reasonable mm range (matches SDK example)
+                depth_mm = np.where(
+                    (depth_mm > cfg.MIN_DEPTH_MM) & (depth_mm < cfg.MAX_DEPTH_MM),
+                    depth_mm,
+                    0,
+                ).astype(np.uint16)
+
+                if live and cfg.SHOW_WINDOW:
                     # Render depth in a simple color map for quick visualization.
-                    depth_vis = depth_to_colormap(depth_m, float(cfg.MAX_VIS_M))
+                    valid = depth_mm[depth_mm > 0]
+                    if cfg.AUTO_SCALE and valid.size:
+                        vmin = float(np.min(valid))
+                        vmax = float(np.max(valid))
+                        if vmax <= vmin:
+                            vmax = vmin + 1e-3
+                        depth_vis = np.clip(depth_mm, vmin, vmax)
+                        depth_8u = ((depth_vis - vmin) / (vmax - vmin) * 255).astype(np.uint8) #type: ignore
+                    else:
+                        depth_vis = np.clip(depth_mm, 0, cfg.MAX_DEPTH_MM)
+                        depth_8u = (depth_vis / cfg.MAX_DEPTH_MM * 255).astype(np.uint8)
+                    depth_vis = cv2.applyColorMap(depth_8u, cv2.COLORMAP_JET)
                     cv2.imshow("Astra2 Depth", depth_vis)
 
                     if have_color:
@@ -228,25 +225,25 @@ def main() -> int:
 
                 now = time.time()
                 if now - last_print >= float(cfg.PRINT_INTERVAL_S):
-                    h, w = depth_m.shape
-                    center_distance_m = float(depth_m[h // 2, w // 2])
-                    print(f"center distance: {center_distance_m:.3f} mm")
+                    h, w = depth_mm.shape
+                    center_distance_mm = int(depth_mm[h // 2, w // 2])
+                    print(f"center distance: {center_distance_mm} mm")
                     last_print = now
 
-                if cfg.LIVE:
+                if live and cfg.SHOW_WINDOW:
                     key = cv2.waitKey(1)
-                    if key in (ESC_KEY, ord("q")):
+                    if key in (27, ord("q")): #27 is the ESC key
                         break
                 else:
                     # Single-shot summary then exit.
-                    summarize_depth(depth_m)
+                    summarize_depth(depth_mm.astype(np.float32) / 1000.0)
                     return 0
 
             else:
                 assert point_cloud_filter is not None
 
-                want_rgb_pc = bool(cfg.POINTCLOUD_WITH_COLOR and have_color and not depth_filters.filters)
-                if cfg.POINTCLOUD_WITH_COLOR and have_color and depth_filters.filters and not warned_rgb_with_filters:
+                want_rgb_pc = bool(have_color and not depth_filters.filters)
+                if have_color and depth_filters.filters and not warned_rgb_with_filters:
                     # RGB point clouds require the full frameset. If depth is filtered,
                     # we fall back to depth-only point clouds for consistency.
                     print("Depth filters are enabled; generating depth-only point clouds to honor filters.")
@@ -281,15 +278,15 @@ def main() -> int:
                         save_point_cloud_to_ply(out_path, xyz, rgb)
                         print(f"Saved point cloud: {out_path}")
                         saved_once = True
-                        if not cfg.LIVE and cfg.POINTCLOUD_SAVE_EVERY_N_FRAMES <= 0:
+                        if not live and cfg.POINTCLOUD_SAVE_EVERY_N_FRAMES <= 0:
                             return 0
 
-                if not cfg.LIVE and not cfg.POINTCLOUD_SAVE_PLY:
+                if not live and not cfg.POINTCLOUD_SAVE_PLY:
                     return 0
 
-                if cfg.LIVE:
+                if live:
                     key = cv2.waitKey(1)
-                    if key in (ESC_KEY, ord("q")):
+                    if key in (27, ord("q")): #27 is the ESC key
                         break
 
             frame_index += 1
