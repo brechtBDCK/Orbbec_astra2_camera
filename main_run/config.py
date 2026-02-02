@@ -9,8 +9,8 @@ from pyorbbecsdk import OBHoleFillingMode
 # High-level behavior
 # ============================================================================
 # MODE = "depth_with_color"      -> view depth + color (RGB-D)
-# MODE = "pointcloud_with_color" -> generate RGB point clouds
-MODE = "depth_with_color"
+# MODE = "pointcloud_with_color" -> generate depth-only point clouds
+MODE = "pointcloud_with_color"
 
 # Single switch for printing info offline and exiting.
 # When True: prints device info, profiles, and recommended filters, then exits.
@@ -26,13 +26,13 @@ DEPTH_PROFILE_INDEX = None  # e.g., 0, 1, 2...
 DEPTH_WIDTH = None          # e.g., 640
 DEPTH_HEIGHT = None         # e.g., 400
 DEPTH_FPS = None            # e.g., 30
-DEPTH_FORMAT_NAME = None    # e.g., "Y16"
+DEPTH_FORMAT_NAME = "Y16"    # e.g., "Y16", 
 
-COLOR_PROFILE_INDEX = None
+COLOR_PROFILE_INDEX = 1
 COLOR_WIDTH = None
 COLOR_HEIGHT = None
 COLOR_FPS = None
-COLOR_FORMAT_NAME = None    # e.g., "RGB", "MJPG", "NV12"
+COLOR_FORMAT_NAME = "RGB"    # e.g., "RGB", "MJPG", "NV12"
 
 
 # ============================================================================
@@ -53,7 +53,7 @@ SPATIAL_MAGNITUDE = 1
 SPATIAL_RADIUS = 1
 
 # --- TemporalFilter ---
-ENABLE_TEMPORAL = False
+ENABLE_TEMPORAL = True
 # Lower diff/weight => more smoothing (but more lag).
 TEMPORAL_DIFF_SCALE = 0.1
 TEMPORAL_WEIGHT = 0.4
@@ -72,6 +72,9 @@ THRESHOLD_MAX = 1000 #1m
 # ============================================================================
 # Display options
 # ============================================================================
+# Discard the first N frames after stream start (sensor warmup).
+WARMUP_FRAMES = 10
+
 SHOW_WINDOW = True
 PRINT_INTERVAL_S = 1.0
 TIMEOUT_MS = 100
@@ -87,13 +90,10 @@ AUTO_SCALE = True #Set to true when using the threshold filter to see depth vari
 # ============================================================================
 # Point-cloud options
 # ============================================================================
-# Normalize RGB colors in the SDK point cloud filter
-POINTCLOUD_COLOR_NORMALIZE = True
+# Average N point cloud frames before saving.
+POINTCLOUD_AVERAGE_N_FRAMES = 1 #keep 1, do averaging in the temporal depth domain, not pointcloud domain.
 
-# Save PLY files to disk
+# Save PLY files to disk.
 POINTCLOUD_SAVE_PLY = True
 POINTCLOUD_SAVE_DIR = "point_clouds"
 POINTCLOUD_SAVE_PREFIX = "astra2_pc"
-
-# 0 => save once then stop. N>0 => save every N frames.
-POINTCLOUD_SAVE_EVERY_N_FRAMES = 0

@@ -4,4 +4,4 @@ __pycache__/
 .vscode/
 typings/
 pyorbbecsdk/
-
+point_clouds/*

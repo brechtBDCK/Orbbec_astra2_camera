@@ -71,7 +71,7 @@ WINDOW_POS_X = 50
 WINDOW_POS_Y = 50
 
 # If True, scale colors per-frame using valid depth range for better gradients.
-AUTO_SCALE = False #Set to true when using the threshold filter to see depth variations better.
+AUTO_SCALE = True #Set to true when using the threshold filter to see depth variations better.
 
 # ============================================================================
 # Time sync (helps reduce timestamp anomaly warnings)

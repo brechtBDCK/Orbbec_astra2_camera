@@ -5,7 +5,6 @@ These functions generate and optionally save point clouds.
 
 import os
 import time
-from typing import Tuple
 
 import numpy as np
 
@@ -83,7 +82,6 @@ def decode_point_cloud_frame_to_numpy(point_cloud_frame, point_format: OBFormat)
 def create_pointcloud_filter(pipeline: Pipeline) -> PointCloudFilter:
     """Create and configure the SDK point cloud filter."""
     pc = PointCloudFilter()
-    pc.set_color_data_normalization(bool(cfg.POINTCLOUD_COLOR_NORMALIZE))
     try:
         cam_param = pipeline.get_camera_param()
         pc.set_camera_param(cam_param)
