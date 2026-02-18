@@ -1,56 +1,8 @@
-"""Point cloud helpers.
-
-These functions generate and optionally save point clouds.
-"""
-
-import os
-import time
+"""Point cloud helpers."""
 
 import numpy as np
 
 from pyorbbecsdk import OBFormat, PointCloudFilter, Pipeline
-
-import main_run.config as cfg
-
-
-def ensure_pointcloud_dir() -> str:
-    """Ensure the output directory exists."""
-    out_dir = os.path.join(os.getcwd(), cfg.POINTCLOUD_SAVE_DIR)
-    os.makedirs(out_dir, exist_ok=True)
-    return out_dir
-
-
-def pointcloud_output_path(frame_index: int) -> str:
-    """Create a timestamped output path for a PLY file."""
-    out_dir = ensure_pointcloud_dir()
-    ts = time.strftime("%Y%m%d_%H%M%S")
-    return os.path.join(out_dir, f"{cfg.POINTCLOUD_SAVE_PREFIX}_{ts}_{frame_index:06d}.ply")
-
-
-def save_point_cloud_to_ply(path: str, points_xyz: np.ndarray, rgb: np.ndarray | None = None) -> None:
-    """Save XYZ (and optional RGB) to an ASCII PLY file."""
-    n = points_xyz.shape[0]
-    has_color = rgb is not None
-
-    with open(path, "w", encoding="utf-8") as f:
-        f.write("ply\n")
-        f.write("format ascii 1.0\n")
-        f.write(f"element vertex {n}\n")
-        f.write("property float x\n")
-        f.write("property float y\n")
-        f.write("property float z\n")
-        if has_color:
-            f.write("property uchar red\n")
-            f.write("property uchar green\n")
-            f.write("property uchar blue\n")
-        f.write("end_header\n")
-
-        if has_color:
-            for (x, y, z), (r, g, b) in zip(points_xyz, rgb, strict=False):
-                f.write(f"{x} {y} {z} {int(r)} {int(g)} {int(b)}\n")
-        else:
-            for (x, y, z) in points_xyz:
-                f.write(f"{x} {y} {z}\n")
 
 
 def decode_point_cloud_frame_to_numpy(point_cloud_frame, point_format: OBFormat):

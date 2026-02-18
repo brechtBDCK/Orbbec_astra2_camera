@@ -5,3 +5,5 @@ __pycache__/
 typings/
 pyorbbecsdk/
 point_clouds/*
+captures/*
+

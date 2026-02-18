@@ -8,9 +8,9 @@ from pyorbbecsdk import OBHoleFillingMode
 # ============================================================================
 # High-level behavior
 # ============================================================================
-# MODE = "depth_with_color"      -> view depth + color (RGB-D)
-# MODE = "pointcloud_with_color" -> generate depth-only point clouds
-MODE = "pointcloud_with_color"
+# MODE = "depth_with_color"       -> view depth + color (RGB-D)
+# MODE = "pointcloud_only_depth"  -> generate depth-only point clouds
+MODE = "pointcloud_only_depth"  
 
 # Single switch for printing info offline and exiting.
 # When True: prints device info, profiles, and recommended filters, then exits.
@@ -22,7 +22,7 @@ PRINT_INFO_OFFLINE = False
 # ============================================================================
 # If PROFILE_INDEX is set, width/height/fps are taken from that profile.
 # You do NOT need to set width/height/fps in that case.
-DEPTH_PROFILE_INDEX = None  # e.g., 0, 1, 2...
+DEPTH_PROFILE_INDEX = 2  # e.g., 0, 1, 2...
 DEPTH_WIDTH = None          # e.g., 640
 DEPTH_HEIGHT = None         # e.g., 400
 DEPTH_FPS = None            # e.g., 30
@@ -65,7 +65,7 @@ HOLE_FILLING_MODE = OBHoleFillingMode.NEAREST  # FURTHEST / NEAREST / TOP
 # --- ThresholdFilter ---
 ENABLE_THRESHOLD = True
 # Optional depth range clamp (units depend on device; often mm scale in Y16)
-THRESHOLD_MIN = 200  #20cm
+THRESHOLD_MIN = 600  #60cm
 THRESHOLD_MAX = 1000 #1m
 
 
@@ -73,7 +73,7 @@ THRESHOLD_MAX = 1000 #1m
 # Display options
 # ============================================================================
 # Discard the first N frames after stream start (sensor warmup).
-WARMUP_FRAMES = 10
+WARMUP_FRAMES = 50
 
 SHOW_WINDOW = True
 PRINT_INTERVAL_S = 1.0
@@ -88,12 +88,10 @@ WINDOW_POS_Y = 50
 AUTO_SCALE = True #Set to true when using the threshold filter to see depth variations better.
 
 # ============================================================================
-# Point-cloud options
+# Capture options
 # ============================================================================
-# Average N point cloud frames before saving.
-POINTCLOUD_AVERAGE_N_FRAMES = 1 #keep 1, do averaging in the temporal depth domain, not pointcloud domain.
-
-# Save PLY files to disk.
-POINTCLOUD_SAVE_PLY = True
-POINTCLOUD_SAVE_DIR = "point_clouds"
-POINTCLOUD_SAVE_PREFIX = "astra2_pc"
+CAPTURE_DIR = "captures"
+CAPTURE_PREFIX = "capture"
+CAPTURE_RGBD_SUBDIR = "rgbd"
+CAPTURE_POINTCLOUD_SUBDIR = "pointcloud"
+CAPTURE_CALIB_JSON = "utils/camera_intrinsics.json"
