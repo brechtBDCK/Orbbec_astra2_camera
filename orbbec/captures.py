@@ -2,22 +2,23 @@
 
 import json
 import os
-import time
 
 import cv2
 import numpy as np
 
 _CALIB_CACHE: dict | None = None
-_CALIB_PATH: str | None = None
+_CALIB_PATH: str | None = None  # cache keyed by the resolved JSON path
 
 
 def _cap_get(capture_cfg: dict | None, key: str, default):
+    """Small helper: allow missing capture_cfg without lots of None checks."""
     if not isinstance(capture_cfg, dict):
         return default
     return capture_cfg.get(key, default)
 
 
 def ensure_capture_dir(capture_cfg: dict | None, subdir: str | None = None) -> str:
+    """Create (if needed) and return the output directory for captures."""
     out_dir = os.path.join(os.getcwd(), _cap_get(capture_cfg, "dir", "captures"))
     if subdir:
         out_dir = os.path.join(out_dir, subdir)
@@ -26,9 +27,33 @@ def ensure_capture_dir(capture_cfg: dict | None, subdir: str | None = None) -> s
 
 
 def _capture_basename(capture_cfg: dict | None, index: int) -> str:
-    ts = time.strftime("%Y%m%d_%H%M%S")
     prefix = _cap_get(capture_cfg, "prefix", "capture")
-    return f"{prefix}_{ts}_{index:06d}"
+    return f"{prefix}_{index:06d}"
+
+
+def next_capture_index(capture_cfg: dict | None) -> int:
+    """Return the next capture index by scanning existing files."""
+    base_dir = os.path.join(os.getcwd(), _cap_get(capture_cfg, "dir", "captures"))
+    if not os.path.isdir(base_dir):
+        return 1
+
+    prefix = _cap_get(capture_cfg, "prefix", "capture")
+    prefix_tag = f"{prefix}_"
+    max_idx = 0
+
+    for root, _dirs, files in os.walk(base_dir):
+        for name in files:
+            if not name.startswith(prefix_tag):
+                continue
+            rest = name[len(prefix_tag) :]
+            idx_part = rest.split("_", 1)[0]
+            if not idx_part.isdigit():
+                continue
+            idx = int(idx_part)
+            if idx > max_idx:
+                max_idx = idx
+
+    return max_idx + 1
 
 
 def save_rgbd_capture(
@@ -149,6 +174,7 @@ def save_pointcloud_undistorted(
 
 
 def _save_point_cloud_to_ply(path: str, points_xyz: np.ndarray) -> None:
+    """Write a minimal ASCII PLY with XYZ points."""
     n = points_xyz.shape[0]
     with open(path, "w", encoding="utf-8") as f:
         f.write("ply\n")
@@ -163,6 +189,7 @@ def _save_point_cloud_to_ply(path: str, points_xyz: np.ndarray) -> None:
 
 
 def _resolve_calib_path(capture_cfg: dict | None) -> str:
+    """Resolve calibration path relative to CWD if not absolute."""
     path = _cap_get(capture_cfg, "calib_json", "camera_intrinsics.json")
     if os.path.isabs(path):
         return path
@@ -170,6 +197,7 @@ def _resolve_calib_path(capture_cfg: dict | None) -> str:
 
 
 def _load_calibration(capture_cfg: dict | None) -> dict | None:
+    """Load and cache intrinsics/distortion JSON."""
     global _CALIB_CACHE, _CALIB_PATH
     path = _resolve_calib_path(capture_cfg)
     if _CALIB_CACHE is not None and _CALIB_PATH == path:
@@ -182,11 +210,45 @@ def _load_calibration(capture_cfg: dict | None) -> dict | None:
     return _CALIB_CACHE
 
 
-def _build_camera_matrix(fx: float, fy: float, cx: float, cy: float) -> np.ndarray:
+def _pick_cfg_by_size(calib: dict, kind: str, width: int, height: int) -> dict | None:
+    """Pick intrinsics by WxH key if available."""
+    key = f"{int(width)}x{int(height)}"
+    by_size = calib.get(f"{kind}_by_size", {})
+    if isinstance(by_size, dict) and key in by_size:
+        return by_size[key]
+    return None
+
+
+def _get_intrinsic_matrix(calib: dict, kind: str, width: int, height: int) -> np.ndarray | None:
+    """Return K for the given stream size, or None if missing."""
+    cfg = _pick_cfg_by_size(calib, kind, width, height)
+    if cfg is None:
+        return None
+    intr = cfg.get("intrinsic", cfg)
+    return build_camera_matrix(
+        float(intr.get("fx", 0.0)),
+        float(intr.get("fy", 0.0)),
+        float(intr.get("cx", 0.0)),
+        float(intr.get("cy", 0.0)),
+    )
+
+
+def _get_distortion(calib: dict, kind: str, width: int, height: int) -> np.ndarray | None:
+    """Return distortion vector for the given stream size, or None if missing."""
+    cfg = _pick_cfg_by_size(calib, kind, width, height)
+    if cfg is None:
+        return None
+    dist = cfg.get("distortion", cfg)
+    return build_distortion(dist)
+
+
+def build_camera_matrix(fx: float, fy: float, cx: float, cy: float) -> np.ndarray:
+    """Standard pinhole camera matrix."""
     return np.array([[fx, 0.0, cx], [0.0, fy, cy], [0.0, 0.0, 1.0]], dtype=np.float64)
 
 
-def _build_distortion(dist: dict) -> np.ndarray:
+def build_distortion(dist: dict) -> np.ndarray:
+    """Build OpenCV distortion vector (supports 5 or 8 params)."""
     k1 = float(dist.get("k1", 0.0))
     k2 = float(dist.get("k2", 0.0))
     p1 = float(dist.get("p1", 0.0))
@@ -203,36 +265,8 @@ def _build_distortion(dist: dict) -> np.ndarray:
     return np.array([k1, k2, p1, p2, k3], dtype=np.float64)
 
 
-def _pick_cfg_by_size(calib: dict, kind: str, width: int, height: int) -> dict | None:
-    key = f"{int(width)}x{int(height)}"
-    by_size = calib.get(f"{kind}_by_size", {})
-    if isinstance(by_size, dict) and key in by_size:
-        return by_size[key]
-    return None
-
-
-def _get_intrinsic_matrix(calib: dict, kind: str, width: int, height: int) -> np.ndarray | None:
-    cfg = _pick_cfg_by_size(calib, kind, width, height)
-    if cfg is None:
-        return None
-    intr = cfg.get("intrinsic", cfg)
-    return _build_camera_matrix(
-        float(intr.get("fx", 0.0)),
-        float(intr.get("fy", 0.0)),
-        float(intr.get("cx", 0.0)),
-        float(intr.get("cy", 0.0)),
-    )
-
-
-def _get_distortion(calib: dict, kind: str, width: int, height: int) -> np.ndarray | None:
-    cfg = _pick_cfg_by_size(calib, kind, width, height)
-    if cfg is None:
-        return None
-    dist = cfg.get("distortion", cfg)
-    return _build_distortion(dist)
-
-
 def _undistort_color(color_bgr: np.ndarray, calib: dict) -> np.ndarray | None:
+    """Undistort color frame using matching intrinsics."""
     h, w = color_bgr.shape[:2]
     K = _get_intrinsic_matrix(calib, "color", w, h)
     D = _get_distortion(calib, "color", w, h)
@@ -242,6 +276,7 @@ def _undistort_color(color_bgr: np.ndarray, calib: dict) -> np.ndarray | None:
 
 
 def _undistort_depth(depth_mm: np.ndarray, calib: dict) -> np.ndarray | None:
+    """Undistort depth (in mm) using matching intrinsics."""
     h, w = depth_mm.shape[:2]
     K = _get_intrinsic_matrix(calib, "depth", w, h)
     D = _get_distortion(calib, "depth", w, h)
@@ -254,6 +289,7 @@ def _undistort_depth(depth_mm: np.ndarray, calib: dict) -> np.ndarray | None:
 
 
 def _pointcloud_from_depth(depth_mm: np.ndarray, K: np.ndarray) -> np.ndarray:
+    """Back-project depth to XYZ using the pinhole model."""
     h, w = depth_mm.shape[:2]
     fx = float(K[0, 0])
     fy = float(K[1, 1])

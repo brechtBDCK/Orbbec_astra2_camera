@@ -8,6 +8,8 @@ import os
 import cv2
 import numpy as np
 
+from orbbec.visual import depth_to_vis, stack_side_by_side
+
 
 COLOR_IMAGE_PATH = "/home/bdck/PROJECTS_WSL/Orbbec_astra2_camera/captures/rgbd/capture_20260218_112553_000001_color.png"
 DEPTH_IMAGE_PATH = "/home/bdck/PROJECTS_WSL/Orbbec_astra2_camera/captures/rgbd/capture_20260218_112553_000001_depth.png"
@@ -25,27 +27,6 @@ def load_calibration(path: str) -> dict:
     """Load a combined intrinsics JSON file."""
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
-
-
-def build_camera_matrix(fx: float, fy: float, cx: float, cy: float) -> np.ndarray:
-    return np.array([[fx, 0.0, cx], [0.0, fy, cy], [0.0, 0.0, 1.0]], dtype=np.float64)
-
-
-def build_distortion(dist: dict) -> np.ndarray:
-    k1 = float(dist.get("k1", 0.0))
-    k2 = float(dist.get("k2", 0.0))
-    p1 = float(dist.get("p1", 0.0))
-    p2 = float(dist.get("p2", 0.0))
-    k3 = float(dist.get("k3", 0.0))
-    k4 = dist.get("k4")
-    k5 = dist.get("k5")
-    k6 = dist.get("k6")
-    if k4 is not None or k5 is not None or k6 is not None:
-        k4 = float(0.0 if k4 is None else k4)
-        k5 = float(0.0 if k5 is None else k5)
-        k6 = float(0.0 if k6 is None else k6)
-        return np.array([k1, k2, p1, p2, k3, k4, k5, k6], dtype=np.float64)
-    return np.array([k1, k2, p1, p2, k3], dtype=np.float64)
 
 
 def _extract_intrinsics(cfg: dict) -> dict:
@@ -113,25 +94,6 @@ def undistort_image(img: np.ndarray, K: np.ndarray, D: np.ndarray, alpha: float 
     return cv2.undistort(img, K, D, None, new_K)
 
 
-def stack_side_by_side(left: np.ndarray, right: np.ndarray) -> np.ndarray:
-    """Resize to a common height and stack horizontally."""
-    if left is None:
-        return right
-    if right is None:
-        return left
-    lh, lw = left.shape[:2]
-    rh, rw = right.shape[:2]
-    if lh != rh:
-        target_h = max(lh, rh)
-        if lh != target_h:
-            new_w = max(1, int(lw * (target_h / float(lh))))
-            left = cv2.resize(left, (new_w, target_h), interpolation=cv2.INTER_AREA)
-        if rh != target_h:
-            new_w = max(1, int(rw * (target_h / float(rh))))
-            right = cv2.resize(right, (new_w, target_h), interpolation=cv2.INTER_AREA)
-    return np.hstack([left, right])
-
-
 def add_label(img: np.ndarray, label: str) -> np.ndarray:
     """Overlay a small label in the top-left corner."""
     out = img.copy()
@@ -140,21 +102,32 @@ def add_label(img: np.ndarray, label: str) -> np.ndarray:
     return out
 
 
-def depth_to_vis(depth: np.ndarray, max_depth: float | None) -> np.ndarray:
-    """Convert depth (any numeric type) to a colorized visualization."""
-    depth_f = depth.astype(np.float32)
-    valid = depth_f[depth_f > 0]
-    if valid.size == 0:
-        vmin, vmax = 0.0, 1.0
-    else:
-        vmin = float(np.min(valid))
-        vmax = float(np.max(valid)) if max_depth is None else float(max_depth)
-        if vmax <= vmin:
-            vmax = vmin + 1.0
+def depth_to_vis_with_limit(depth: np.ndarray, max_depth: float | None) -> np.ndarray:
+    """Wrapper for depth visualization with optional max clamp."""
+    return depth_to_vis(depth, max_depth=max_depth, auto_scale=True)
 
-    depth_clipped = np.clip(depth_f, vmin, vmax)
-    depth_8u = ((depth_clipped - vmin) / (vmax - vmin) * 255.0).astype(np.uint8)
-    return cv2.applyColorMap(depth_8u, cv2.COLORMAP_JET)
+
+def build_camera_matrix(fx: float, fy: float, cx: float, cy: float) -> np.ndarray:
+    """Standard pinhole camera matrix."""
+    return np.array([[fx, 0.0, cx], [0.0, fy, cy], [0.0, 0.0, 1.0]], dtype=np.float64)
+
+
+def build_distortion(dist: dict) -> np.ndarray:
+    """Build OpenCV distortion vector (supports 5 or 8 params)."""
+    k1 = float(dist.get("k1", 0.0))
+    k2 = float(dist.get("k2", 0.0))
+    p1 = float(dist.get("p1", 0.0))
+    p2 = float(dist.get("p2", 0.0))
+    k3 = float(dist.get("k3", 0.0))
+    k4 = dist.get("k4")
+    k5 = dist.get("k5")
+    k6 = dist.get("k6")
+    if k4 is not None or k5 is not None or k6 is not None:
+        k4 = float(0.0 if k4 is None else k4)
+        k5 = float(0.0 if k5 is None else k5)
+        k6 = float(0.0 if k6 is None else k6)
+        return np.array([k1, k2, p1, p2, k3, k4, k5, k6], dtype=np.float64)
+    return np.array([k1, k2, p1, p2, k3], dtype=np.float64)
 
 
 def _warn_size(name: str, img: np.ndarray, expected: tuple[int, int]) -> None:
@@ -234,8 +207,8 @@ def main() -> int:
         print(f"  distortion: {_format_distortion(depth_dist)}")
 
         depth_undist = undistort_image(depth, depth_K, depth_D, ALPHA)
-        depth_vis = depth_to_vis(depth, DEPTH_MAX)
-        depth_ud_vis = depth_to_vis(depth_undist, DEPTH_MAX)
+        depth_vis = depth_to_vis_with_limit(depth, DEPTH_MAX)
+        depth_ud_vis = depth_to_vis_with_limit(depth_undist, DEPTH_MAX)
         depth_orig = add_label(depth_vis, "depth: original")
         depth_ud = add_label(depth_ud_vis, "depth: undistorted")
         depth_pair = stack_side_by_side(depth_orig, depth_ud)

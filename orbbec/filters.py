@@ -26,6 +26,7 @@ class DepthFilterBundle:
 
 
 def _parse_hole_filling_mode(value):
+    """Accept enum/int/str values from config for hole filling mode."""
     if isinstance(value, OBHoleFillingMode):
         return value
     if isinstance(value, str):
@@ -95,6 +96,7 @@ def build_depth_filters(pipeline: Pipeline, filters_cfg: dict) -> DepthFilterBun
         filters.append(hf)
         description.append("HoleFillingFilter")
 
+    # Threshold is always added when enabled (min/max default to full range).
     if threshold_cfg.get("enabled", True):
         t_min = threshold_cfg.get("min")
         t_max = threshold_cfg.get("max")

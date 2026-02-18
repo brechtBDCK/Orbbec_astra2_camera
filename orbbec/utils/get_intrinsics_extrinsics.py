@@ -1,3 +1,10 @@
+"""Dump per-profile intrinsics/distortion and a single depth->color extrinsic.
+
+This script is intended for calibration data collection. It prints profiles
+and optionally writes a JSON blob that matches the format expected by
+`orbbec/captures.py` and `orbbec/utils/undistort_single_images.py`.
+"""
+
 from __future__ import annotations
 
 import json
@@ -19,6 +26,7 @@ EXTRINSIC_DEPTH_INDEX = None
 
 # Save intrinsics + a single depth->color extrinsic to JSON.
 SAVE_JSON = True
+# Absolute path is fine; you can also use a relative name if you prefer.
 OUTPUT_JSON_NAME = "/home/bdck/PROJECTS_WSL/Orbbec_astra2_camera/camera_intrinsics.json"
 
 

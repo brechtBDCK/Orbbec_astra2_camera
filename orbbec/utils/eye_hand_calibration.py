@@ -63,3 +63,46 @@ Output:
   - Save T_E_C (4x4 homogeneous matrix) in a config file (JSON/YAML).
   - Record units (meters vs mm) and frame conventions.
 """
+from fanuc_rmi import RobotClient
+from orbbec.take_images import take_images
+
+# create client (no network calls yet)
+robot = RobotClient(
+    host="192.168.1.22",
+    startup_port=16001,
+    main_port=16002,
+    connect_timeout=5.0,
+    socket_timeout=100.0,
+    reader_timeout=100.0,
+    attempts=5,
+    retry_delay=0.5,
+    startup_pause=0.25,
+)
+
+robot.connect()            # returns None
+robot.initialize(uframe=0, utool=1)  # returns None
+robot.speed_override(50)  # returns None
+
+# move to absolute joint angles (deg)
+absolute_joints = {"J1": 12.648, "J2": 59.326, "J3": -2.001, "J4": 2.868, "J5": -133.750, "J6": 103.221, "J7": 0.000, "J8": 0.000, "J9": 0.000}
+robot.joint_absolute(absolute_joints, speed_percentage=40, sequence_id=1)  # returns None
+take_images()  # camera takes images and saves the images
+robot.wait_time(0.5, sequence_id=2)  # returns None, waits for 0.5 second
+
+absolute_joints = {"J1": 63.252, "J2": 31.488, "J3": -35.602, "J4": 18.504, "J5": -101.313, "J6": 108.650, "J7": 0.000, "J8": 0.000, "J9": 0.000}
+robot.joint_absolute(absolute_joints, speed_percentage=40, sequence_id=3)  # returns None
+take_images() 
+robot.wait_time(0.5, sequence_id=4)  
+
+absolute_joints = {"J1": -50.296, "J2": 35.193, "J3": -13.797, "J4": -29.754, "J5": -117.368, "J6": 224.915, "J7": 0.000, "J8": 0.000, "J9": 0.000}
+robot.joint_absolute(absolute_joints, speed_percentage=40, sequence_id=5)  # returns None
+take_images()  
+robot.wait_time(0.5, sequence_id=6)  
+
+absolute_joints = {"J1": 1.534, "J2": -70.678, "J3": 31.539, "J4": -163.759, "J5": 76.388, "J6": 224.917, "J7": 0.000, "J8": 0.000, "J9": 0.000}
+robot.joint_absolute(absolute_joints, speed_percentage=40, sequence_id=7)  # returns None
+take_images() 
+robot.wait_time(0.5, sequence_id=8)  
+
+
+robot.close()  # returns None

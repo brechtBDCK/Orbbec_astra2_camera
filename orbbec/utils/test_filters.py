@@ -20,6 +20,8 @@ from pyorbbecsdk import (
     ThresholdFilter,
 )
 
+from orbbec.filters import apply_depth_filters
+
 # ============================================================================
 # User Options (grouped per filter)
 # ============================================================================
@@ -83,25 +85,6 @@ SYNC_INTERVAL_S = 60
 # ============================================================================
 # Helpers
 # ============================================================================
-
-def apply_filters(depth_frame, filters):
-    """Apply enabled filters in sequence, returning a depth frame."""
-    current = depth_frame
-    for f in filters:
-        if f is None:
-            continue
-        try:
-            new_frame = f.process(current)
-        except Exception:
-            continue
-        if new_frame is None:
-            continue
-        try:
-            current = new_frame.as_depth_frame()
-        except Exception:
-            current = new_frame
-    return current
-
 
 def main():
     config = Config()
@@ -176,7 +159,7 @@ def main():
             if depth_frame.get_format() != OBFormat.Y16:
                 continue
 
-            depth_frame = apply_filters(depth_frame, filters)
+            depth_frame = apply_depth_filters(depth_frame, filters)
 
             width = depth_frame.get_width()
             height = depth_frame.get_height()

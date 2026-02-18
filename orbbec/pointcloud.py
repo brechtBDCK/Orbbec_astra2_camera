@@ -14,12 +14,14 @@ def decode_point_cloud_frame_to_numpy(point_cloud_frame, point_format: OBFormat)
     buf = np.frombuffer(data, dtype=np.float32)
 
     if point_format == OBFormat.POINT:
+        # XYZ only (float32 x,y,z)
         if buf.size % 3 != 0:
             raise ValueError(f"Unexpected POINT buffer length: {buf.size}")
         xyz = buf.reshape(-1, 3)
         return xyz, None
 
     if point_format == OBFormat.RGB_POINT:
+        # XYZ + RGB packed as float32 triples (SDK format).
         if buf.size % 6 != 0:
             raise ValueError(f"Unexpected RGB_POINT buffer length: {buf.size}")
         pts = buf.reshape(-1, 6)
@@ -35,6 +37,7 @@ def create_pointcloud_filter(pipeline: Pipeline) -> PointCloudFilter:
     """Create and configure the SDK point cloud filter."""
     pc = PointCloudFilter()
     try:
+        # Camera params are needed for correct scaling in XYZ output.
         cam_param = pipeline.get_camera_param()
         pc.set_camera_param(cam_param)
     except Exception:
