@@ -7,8 +7,6 @@ import numpy as np
 
 from pyorbbecsdk import Pipeline
 
-import main_run.config as cfg
-
 
 def print_device_info(pipeline: Pipeline) -> None:
     """Print a quick summary of the connected device."""
@@ -23,22 +21,6 @@ def print_device_info(pipeline: Pipeline) -> None:
     print(f"  sn:   {info.get_serial_number()}")
     print(f"  fw:   {info.get_firmware_version()}")
 
-
-def summarize_depth(depth_m: np.ndarray) -> None:
-    """Print simple statistics for a depth image in meters."""
-    h, w = depth_m.shape
-    center_m = float(depth_m[h // 2, w // 2])
-    finite = depth_m[np.isfinite(depth_m)]
-    d_min = float(np.min(finite)) if finite.size else float("nan")
-    d_med = float(np.median(finite)) if finite.size else float("nan")
-    d_max = float(np.max(finite)) if finite.size else float("nan")
-
-    print("\nDepth summary:")
-    print(f"  size:   {w}x{h}")
-    print(f"  center: {center_m:.3f} m")
-    print(f"  min:    {d_min:.3f} m")
-    print(f"  median: {d_med:.3f} m")
-    print(f"  max:    {d_max:.3f} m")
 
 
 def extract_depth_frame(obj):
@@ -94,10 +76,13 @@ def stack_side_by_side(left: np.ndarray, right: np.ndarray) -> np.ndarray:
     return np.hstack([left, right])
 
 
-def depth_mm_to_vis(depth_mm: np.ndarray) -> np.ndarray:
+def depth_mm_to_vis(depth_mm: np.ndarray, display_cfg: dict) -> np.ndarray:
     """Convert a depth-mm image to a colored visualization."""
+    display_cfg = display_cfg or {}
+    auto_scale = bool(display_cfg.get("auto_scale", True))
+    max_depth_mm = int(display_cfg.get("max_depth_mm", 10000))
     valid = depth_mm[depth_mm > 0]
-    if cfg.AUTO_SCALE and valid.size:
+    if auto_scale and valid.size:
         vmin = float(np.min(valid))
         vmax = float(np.max(valid))
         if vmax <= vmin:
@@ -105,6 +90,6 @@ def depth_mm_to_vis(depth_mm: np.ndarray) -> np.ndarray:
         depth_vis = np.clip(depth_mm, vmin, vmax)
         depth_8u = ((depth_vis - vmin) / (vmax - vmin) * 255).astype(np.uint8)
     else:
-        depth_vis = np.clip(depth_mm, 0, cfg.MAX_DEPTH_MM)
-        depth_8u = (depth_vis / cfg.MAX_DEPTH_MM * 255).astype(np.uint8)
+        depth_vis = np.clip(depth_mm, 0, max_depth_mm)
+        depth_8u = (depth_vis / max_depth_mm * 255).astype(np.uint8)
     return cv2.applyColorMap(depth_8u, cv2.COLORMAP_JET)

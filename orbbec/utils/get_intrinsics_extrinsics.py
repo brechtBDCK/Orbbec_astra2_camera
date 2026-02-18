@@ -17,13 +17,9 @@ PRINT_EXTRINSICS = True
 EXTRINSIC_COLOR_INDEX = None
 EXTRINSIC_DEPTH_INDEX = None
 
-# If True, print extrinsics for ALL depth profiles to the chosen/default color.
-PRINT_EXTRINSICS_FOR_ALL_DEPTH = False
-
-# Save all intrinsics/extrinsics to JSON.
+# Save intrinsics + a single depth->color extrinsic to JSON.
 SAVE_JSON = True
-OUTPUT_JSON_NAME = "camera_intrinsics.json"
-SAVE_EXTRINSICS_ALL_PAIRS = True
+OUTPUT_JSON_NAME = "/home/bdck/PROJECTS_WSL/Orbbec_astra2_camera/camera_intrinsics.json"
 
 
 def _safe_get(obj, name: str):
@@ -51,26 +47,41 @@ def format_extrinsic(extr) -> str:
 
 
 def intrinsic_to_dict(intr) -> dict:
+    fx = _safe_get(intr, "fx")
+    fy = _safe_get(intr, "fy")
+    cx = _safe_get(intr, "cx")
+    cy = _safe_get(intr, "cy")
+    width = _safe_get(intr, "width")
+    height = _safe_get(intr, "height")
     return {
-        "fx": float(_safe_get(intr, "fx")),
-        "fy": float(_safe_get(intr, "fy")),
-        "cx": float(_safe_get(intr, "cx")),
-        "cy": float(_safe_get(intr, "cy")),
-        "width": int(_safe_get(intr, "width")),
-        "height": int(_safe_get(intr, "height")),
+        "fx": float(fx) if fx is not None else None,
+        "fy": float(fy) if fy is not None else None,
+        "cx": float(cx) if cx is not None else None,
+        "cy": float(cy) if cy is not None else None,
+        "width": int(width) if width is not None else None,
+        "height": int(height) if height is not None else None,
     }
 
 
 def distortion_to_dict(dist) -> dict:
+    k1 = _safe_get(dist, "k1")
+    k2 = _safe_get(dist, "k2")
+    k3 = _safe_get(dist, "k3")
+    k4 = _safe_get(dist, "k4")
+    k5 = _safe_get(dist, "k5")
+    k6 = _safe_get(dist, "k6")
+    
+    p1 = _safe_get(dist, "p1")
+    p2 = _safe_get(dist, "p2")
     return {
-        "k1": float(_safe_get(dist, "k1")),
-        "k2": float(_safe_get(dist, "k2")),
-        "k3": float(_safe_get(dist, "k3")),
-        "k4": float(_safe_get(dist, "k4")),
-        "k5": float(_safe_get(dist, "k5")),
-        "k6": float(_safe_get(dist, "k6")),
-        "p1": float(_safe_get(dist, "p1")),
-        "p2": float(_safe_get(dist, "p2")),
+        "k1": float(k1) if k1 is not None else None,
+        "k2": float(k2) if k2 is not None else None,
+        "k3": float(k3) if k3 is not None else None,
+        "k4": float(k4) if k4 is not None else None,
+        "k5": float(k5) if k5 is not None else None,
+        "k6": float(k6) if k6 is not None else None,
+        "p1": float(p1) if p1 is not None else None,
+        "p2": float(p2) if p2 is not None else None,
     }
 
 
@@ -129,25 +140,6 @@ def size_key(width: int, height: int) -> str:
     return f"{int(width)}x{int(height)}"
 
 
-def _find_default_index(profile_list, default_profile) -> int | None:
-    if default_profile is None:
-        return None
-    count = profile_list.get_count()
-    for i in range(count):
-        sp = profile_list.get_stream_profile_by_index(i)
-        if sp is None or not sp.is_video_stream_profile():
-            continue
-        vsp = sp.as_video_stream_profile()
-        if (
-            vsp.get_width() == default_profile.get_width()
-            and vsp.get_height() == default_profile.get_height()
-            and vsp.get_fps() == default_profile.get_fps()
-            and sp.get_format() == default_profile.get_format()
-        ):
-            return i
-    return None
-
-
 def main() -> None:
     pipeline = Pipeline()
 
@@ -186,25 +178,16 @@ def main() -> None:
 
     if PRINT_EXTRINSICS:
         color_profile = get_profile_by_index(color_list, EXTRINSIC_COLOR_INDEX)
-
-        if PRINT_EXTRINSICS_FOR_ALL_DEPTH:
-            print("\nExtrinsics (depth -> selected color):")
-            for i in range(depth_list.get_count()):
-                sp = depth_list.get_stream_profile_by_index(i)
-                if sp is None or not sp.is_video_stream_profile():
-                    continue
-                depth_profile = sp.as_video_stream_profile()
-                extr = depth_profile.get_extrinsic_to(color_profile)
-                print(f"  depth[{i:02d}] -> color[{EXTRINSIC_COLOR_INDEX or 'default'}]: {format_extrinsic(extr)}")
-        else:
-            depth_profile = get_profile_by_index(depth_list, EXTRINSIC_DEPTH_INDEX)
-            extr = depth_profile.get_extrinsic_to(color_profile)
-            print("\nExtrinsics (depth -> color):")
-            print(f"  depth[{EXTRINSIC_DEPTH_INDEX or 'default'}] -> color[{EXTRINSIC_COLOR_INDEX or 'default'}]: {format_extrinsic(extr)}")
+        depth_profile = get_profile_by_index(depth_list, EXTRINSIC_DEPTH_INDEX)
+        extr = depth_profile.get_extrinsic_to(color_profile)
+        print("\nExtrinsics (depth -> color):")
+        print(
+            f"  depth[{EXTRINSIC_DEPTH_INDEX or 'default'}] -> "
+            f"color[{EXTRINSIC_COLOR_INDEX or 'default'}]: {format_extrinsic(extr)}"
+        )
 
     if SAVE_JSON:
         depth_by_size: dict[str, dict] = {}
-        depth_profile_by_size: dict[str, object] = {}
         for i in range(depth_list.get_count()):
             sp = depth_list.get_stream_profile_by_index(i)
             if sp is None or not sp.is_video_stream_profile():
@@ -218,10 +201,8 @@ def main() -> None:
                     "intrinsic": intrinsic_to_dict(vsp.get_intrinsic()),
                     "distortion": distortion_to_dict(vsp.get_distortion()),
                 }
-                depth_profile_by_size[key] = vsp
 
         color_by_size: dict[str, dict] = {}
-        color_profile_by_size: dict[str, object] = {}
         for i in range(color_list.get_count()):
             sp = color_list.get_stream_profile_by_index(i)
             if sp is None or not sp.is_video_stream_profile():
@@ -235,41 +216,16 @@ def main() -> None:
                     "intrinsic": intrinsic_to_dict(vsp.get_intrinsic()),
                     "distortion": distortion_to_dict(vsp.get_distortion()),
                 }
-                color_profile_by_size[key] = vsp
+
+        color_profile = get_profile_by_index(color_list, EXTRINSIC_COLOR_INDEX)
+        depth_profile = get_profile_by_index(depth_list, EXTRINSIC_DEPTH_INDEX)
+        extr = depth_profile.get_extrinsic_to(color_profile)
 
         data = {
             "depth_by_size": depth_by_size,
             "color_by_size": color_by_size,
-            "extrinsics": {"depth_to_color": []},
+            "extrinsics": {"depth_to_color": extrinsic_to_dict(extr)},
         }
-
-        extr_list = []
-        if SAVE_EXTRINSICS_ALL_PAIRS:
-            for d_key, d_vsp in depth_profile_by_size.items():
-                for c_key, c_vsp in color_profile_by_size.items():
-                    extr = d_vsp.get_extrinsic_to(c_vsp)
-                    extr_list.append(
-                        {
-                            "depth_size": d_key,
-                            "color_size": c_key,
-                            **extrinsic_to_dict(extr),
-                        }
-                    )
-        else:
-            color_profile = get_profile_by_index(color_list, EXTRINSIC_COLOR_INDEX)
-            depth_profile = get_profile_by_index(depth_list, EXTRINSIC_DEPTH_INDEX)
-            extr = depth_profile.get_extrinsic_to(color_profile)
-            d_key = size_key(depth_profile.get_width(), depth_profile.get_height())
-            c_key = size_key(color_profile.get_width(), color_profile.get_height())
-            extr_list.append(
-                {
-                    "depth_size": d_key,
-                    "color_size": c_key,
-                    **extrinsic_to_dict(extr),
-                }
-            )
-
-        data["extrinsics"]["depth_to_color"] = extr_list
 
         out_path = os.path.join(os.path.dirname(__file__), OUTPUT_JSON_NAME)
         with open(out_path, "w", encoding="utf-8") as f:

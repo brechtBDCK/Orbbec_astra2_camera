@@ -40,20 +40,3 @@ def create_pointcloud_filter(pipeline: Pipeline) -> PointCloudFilter:
     except Exception:
         pass
     return pc
-
-
-def summarize_pointcloud(xyz: np.ndarray) -> None:
-    """Print simple statistics about the point cloud."""
-    if xyz.size == 0:
-        print("Point cloud is empty.")
-        return
-    z = xyz[:, 2]
-    finite_z = z[np.isfinite(z)]
-    z_min = float(np.min(finite_z)) if finite_z.size else float("nan")
-    z_med = float(np.median(finite_z)) if finite_z.size else float("nan")
-    z_max = float(np.max(finite_z)) if finite_z.size else float("nan")
-    print("\nPoint cloud summary:")
-    print(f"  points: {xyz.shape[0]}")
-    print(f"  z min:  {z_min:.3f}")
-    print(f"  z med:  {z_med:.3f}")
-    print(f"  z max:  {z_max:.3f}")

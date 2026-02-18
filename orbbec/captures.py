@@ -1,7 +1,5 @@
 """Capture helpers for RGB-D images and point clouds."""
 
-from __future__ import annotations
-
 import json
 import os
 import time
@@ -9,22 +7,27 @@ import time
 import cv2
 import numpy as np
 
-import main_run.config as cfg
-
 _CALIB_CACHE: dict | None = None
+_CALIB_PATH: str | None = None
 
 
-def ensure_capture_dir(subdir: str | None = None) -> str:
-    out_dir = os.path.join(os.getcwd(), cfg.CAPTURE_DIR)
+def _cap_get(capture_cfg: dict | None, key: str, default):
+    if not isinstance(capture_cfg, dict):
+        return default
+    return capture_cfg.get(key, default)
+
+
+def ensure_capture_dir(capture_cfg: dict | None, subdir: str | None = None) -> str:
+    out_dir = os.path.join(os.getcwd(), _cap_get(capture_cfg, "dir", "captures"))
     if subdir:
         out_dir = os.path.join(out_dir, subdir)
     os.makedirs(out_dir, exist_ok=True)
     return out_dir
 
 
-def _capture_basename(index: int) -> str:
+def _capture_basename(capture_cfg: dict | None, index: int) -> str:
     ts = time.strftime("%Y%m%d_%H%M%S")
-    prefix = getattr(cfg, "CAPTURE_PREFIX", "capture")
+    prefix = _cap_get(capture_cfg, "prefix", "capture")
     return f"{prefix}_{ts}_{index:06d}"
 
 
@@ -33,10 +36,11 @@ def save_rgbd_capture(
     color_bgr: np.ndarray | None,
     depth_vis: np.ndarray | None,
     index: int,
+    capture_cfg: dict | None,
 ) -> list[str]:
     """Save RGB (optional) + depth (optional) images. Returns saved paths."""
-    out_dir = ensure_capture_dir(getattr(cfg, "CAPTURE_RGBD_SUBDIR", "rgbd"))
-    base = _capture_basename(index)
+    out_dir = ensure_capture_dir(capture_cfg, _cap_get(capture_cfg, "rgbd_subdir", "rgbd"))
+    base = _capture_basename(capture_cfg, index)
     saved: list[str] = []
 
     if color_bgr is not None:
@@ -57,10 +61,12 @@ def save_rgbd_capture(
     return saved
 
 
-def save_pointcloud_capture(points_xyz: np.ndarray, index: int) -> str:
+def save_pointcloud_capture(points_xyz: np.ndarray, index: int, capture_cfg: dict | None) -> str:
     """Save XYZ point cloud to an ASCII PLY file. Returns the path."""
-    out_dir = ensure_capture_dir(getattr(cfg, "CAPTURE_POINTCLOUD_SUBDIR", "pointcloud"))
-    base = _capture_basename(index)
+    out_dir = ensure_capture_dir(
+        capture_cfg, _cap_get(capture_cfg, "pointcloud_subdir", "pointcloud")
+    )
+    base = _capture_basename(capture_cfg, index)
     path = os.path.join(out_dir, f"{base}_points.ply")
     _save_point_cloud_to_ply(path, points_xyz)
     return path
@@ -71,19 +77,20 @@ def save_rgbd_undistorted(
     color_bgr: np.ndarray | None,
     depth_vis_fn,
     index: int,
+    capture_cfg: dict | None,
 ) -> list[str]:
     """Save undistorted RGB + depth (and depth visualization)."""
     if depth_mm is None and color_bgr is None:
         return []
 
-    calib = _load_calibration()
+    calib = _load_calibration(capture_cfg)
     if calib is None:
         print("Undistort: calibration JSON not found.")
         return []
 
     saved: list[str] = []
-    out_dir = ensure_capture_dir(getattr(cfg, "CAPTURE_RGBD_SUBDIR", "rgbd"))
-    base = _capture_basename(index)
+    out_dir = ensure_capture_dir(capture_cfg, _cap_get(capture_cfg, "rgbd_subdir", "rgbd"))
+    base = _capture_basename(capture_cfg, index)
 
     if color_bgr is not None:
         color_ud = _undistort_color(color_bgr, calib)
@@ -112,9 +119,11 @@ def save_rgbd_undistorted(
     return saved
 
 
-def save_pointcloud_undistorted(depth_mm: np.ndarray, index: int) -> str | None:
+def save_pointcloud_undistorted(
+    depth_mm: np.ndarray, index: int, capture_cfg: dict | None
+) -> str | None:
     """Save a point cloud derived from undistorted depth."""
-    calib = _load_calibration()
+    calib = _load_calibration(capture_cfg)
     if calib is None:
         print("Undistort: calibration JSON not found.")
         return None
@@ -130,8 +139,10 @@ def save_pointcloud_undistorted(depth_mm: np.ndarray, index: int) -> str | None:
         return None
 
     xyz = _pointcloud_from_depth(depth_ud, K)
-    out_dir = ensure_capture_dir(getattr(cfg, "CAPTURE_POINTCLOUD_SUBDIR", "pointcloud"))
-    base = _capture_basename(index)
+    out_dir = ensure_capture_dir(
+        capture_cfg, _cap_get(capture_cfg, "pointcloud_subdir", "pointcloud")
+    )
+    base = _capture_basename(capture_cfg, index)
     path = os.path.join(out_dir, f"{base}_points_undist.ply")
     _save_point_cloud_to_ply(path, xyz)
     return path
@@ -151,22 +162,23 @@ def _save_point_cloud_to_ply(path: str, points_xyz: np.ndarray) -> None:
             f.write(f"{x} {y} {z}\n")
 
 
-def _resolve_calib_path() -> str:
-    path = getattr(cfg, "CAPTURE_CALIB_JSON", "utils/camera_intrinsics.json")
+def _resolve_calib_path(capture_cfg: dict | None) -> str:
+    path = _cap_get(capture_cfg, "calib_json", "camera_intrinsics.json")
     if os.path.isabs(path):
         return path
     return os.path.join(os.getcwd(), path)
 
 
-def _load_calibration() -> dict | None:
-    global _CALIB_CACHE
-    if _CALIB_CACHE is not None:
+def _load_calibration(capture_cfg: dict | None) -> dict | None:
+    global _CALIB_CACHE, _CALIB_PATH
+    path = _resolve_calib_path(capture_cfg)
+    if _CALIB_CACHE is not None and _CALIB_PATH == path:
         return _CALIB_CACHE
-    path = _resolve_calib_path()
     if not os.path.exists(path):
         return None
     with open(path, "r", encoding="utf-8") as f:
         _CALIB_CACHE = json.load(f)
+        _CALIB_PATH = path
     return _CALIB_CACHE
 
 

@@ -1,6 +1,6 @@
 # Orbbec Astra2 Camera Runner
 
-Minimal Python runner for Orbbec Astra2 using `pyorbbecsdk`. It supports live depth+color preview and depth-only point clouds with optional depth filters.
+Minimal Python runner for Orbbec Astra2 using `pyorbbecsdk`. It supports live depth+color preview with optional depth filters and point cloud captures.
 
 ## Quick start
 
@@ -11,28 +11,21 @@ source venv_orbbec/bin/activate
 
 2) Run:
 ```
-python main_run/main.py
+python main.py
 ```
 
-## Main modes
+## Configuration
 
-Configure in `main_run/config.py`:
-- `MODE = "depth_with_color"` -> live depth + color preview
-- `MODE = "pointcloud_only_depth"` -> depth-only point clouds
+Edit `config.toml` at the repo root.
 
 ## Key config knobs
 
-- Warmup: `WARMUP_FRAMES` (skip initial frames; helps temporal stability)
-- Depth format: `DEPTH_FORMAT_NAME = "Y16"` (recommended for filters)
-- Filters: `ENABLE_TEMPORAL`, `ENABLE_SPATIAL`, `ENABLE_HOLE_FILLING`, `ENABLE_THRESHOLD`, etc.
-- Captures: press `s` to save RGB-D or point cloud captures into `captures/`
-
-## Utilities
-
-- `get_intrinsics_extrinsics.py` prints intrinsics and extrinsics for the default profiles.
-- `test_filters.py` is a standalone depth filter demo.
+- Warmup: `display.warmup_frames` (skip initial frames; helps temporal stability)
+- Depth format: `streams.depth.format = "Y16"` (recommended for filters)
+- Filters: `filters.temporal`, `filters.spatial`, `filters.hole_filling`, `filters.threshold`, etc.
+- Captures: press `s` to save color, depth, pointcloud, and undistorted versions into `captures/`
 
 ## Notes / troubleshooting
 
-- If you see “unsupported format: RLE” from filters, force Y16 with `DEPTH_FORMAT_NAME = "Y16"` or pick a Y16 profile via `DEPTH_PROFILE_INDEX`.
-- Temporal filtering improves stability but needs a few frames to settle; keep `WARMUP_FRAMES` > 0.
+- If you see “unsupported format: RLE” from filters, force Y16 via `streams.depth.format = "Y16"` or pick a Y16 profile index.
+- Temporal filtering improves stability but needs a few frames to settle; keep `display.warmup_frames` > 0.

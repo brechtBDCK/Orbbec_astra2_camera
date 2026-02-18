@@ -10,15 +10,13 @@ from pyorbbecsdk import (
     DecimationFilter,
     DisparityTransform,
     HoleFillingFilter,
-    OBSensorType,
+    OBHoleFillingMode,
     OBSpatialAdvancedFilterParams,
     Pipeline,
     SpatialAdvancedFilter,
     TemporalFilter,
     ThresholdFilter,
 )
-
-import main_run.config as cfg
 
 
 @dataclass
@@ -27,54 +25,81 @@ class DepthFilterBundle:
     description: list[str]
 
 
-def build_depth_filters(pipeline: Pipeline) -> DepthFilterBundle:
+def _parse_hole_filling_mode(value):
+    if isinstance(value, OBHoleFillingMode):
+        return value
+    if isinstance(value, str):
+        name = value.strip().upper()
+        if hasattr(OBHoleFillingMode, name):
+            return getattr(OBHoleFillingMode, name)
+    if isinstance(value, int):
+        try:
+            return OBHoleFillingMode(value)
+        except Exception:
+            return None
+    return None
+
+
+def build_depth_filters(pipeline: Pipeline, filters_cfg: dict) -> DepthFilterBundle:
     """Build depth filters from config flags."""
+    filters_cfg = filters_cfg or {}
+    decimation_cfg = filters_cfg.get("decimation", {})
+    disparity_cfg = filters_cfg.get("disparity", {})
+    spatial_cfg = filters_cfg.get("spatial", {})
+    temporal_cfg = filters_cfg.get("temporal", {})
+    hole_cfg = filters_cfg.get("hole_filling", {})
+    threshold_cfg = filters_cfg.get("threshold", {})
     filters: list = []
     description: list[str] = []
 
-    if cfg.ENABLE_DECIMATION:
+    if decimation_cfg.get("enabled", False):
         df = DecimationFilter()
         scale_note = ""
-        if cfg.DECIMATION_SCALE_VALUE is not None:
+        scale_value = decimation_cfg.get("scale_value")
+        if scale_value is not None:
             try:
-                scale_value = int(cfg.DECIMATION_SCALE_VALUE)
+                scale_value = int(scale_value)
                 df.set_scale_value(scale_value)
                 scale_note = f" (scale={scale_value})"
             except Exception:
                 pass
         filters.append(df)
         description.append(f"DecimationFilter{scale_note}")
-    if cfg.ENABLE_DISPARITY:
+    if disparity_cfg.get("enabled", True):
         filters.append(DisparityTransform())
         description.append("DisparityTransform")
-    if cfg.ENABLE_TEMPORAL:
+    if temporal_cfg.get("enabled", True):
         tf = TemporalFilter()
-        tf.set_diff_scale(float(cfg.TEMPORAL_DIFF_SCALE))
-        tf.set_weight(float(cfg.TEMPORAL_WEIGHT))
+        tf.set_diff_scale(float(temporal_cfg.get("diff_scale", 0.1)))
+        tf.set_weight(float(temporal_cfg.get("weight", 0.4)))
         filters.append(tf)
         description.append("TemporalFilter")
-    if cfg.ENABLE_SPATIAL:
+    if spatial_cfg.get("enabled", False):
         sf = SpatialAdvancedFilter()
         params = OBSpatialAdvancedFilterParams()
-        params.alpha = float(cfg.SPATIAL_ALPHA)
-        params.disp_diff = int(cfg.SPATIAL_DIFF_THRESHOLD)
-        params.magnitude = int(cfg.SPATIAL_MAGNITUDE)
-        params.radius = int(cfg.SPATIAL_RADIUS)
+        params.alpha = float(spatial_cfg.get("alpha", 0.5))
+        params.disp_diff = int(spatial_cfg.get("diff_threshold", 160))
+        params.magnitude = int(spatial_cfg.get("magnitude", 1))
+        params.radius = int(spatial_cfg.get("radius", 1))
         sf.set_filter_params(params)
         filters.append(sf)
         description.append("SpatialAdvancedFilter")
-    if cfg.ENABLE_HOLE_FILLING:
+    if hole_cfg.get("enabled", False):
         hf = HoleFillingFilter()
-        try:
-            hf.set_filling_mode(cfg.HOLE_FILLING_MODE)
-        except Exception:
-            pass
+        mode = _parse_hole_filling_mode(hole_cfg.get("mode", "NEAREST"))
+        if mode is not None:
+            try:
+                hf.set_filling_mode(mode)
+            except Exception:
+                pass
         filters.append(hf)
         description.append("HoleFillingFilter")
 
-    if cfg.THRESHOLD_MIN is not None or cfg.THRESHOLD_MAX is not None:
-        t_min = 0 if cfg.THRESHOLD_MIN is None else int(cfg.THRESHOLD_MIN)
-        t_max = 65535 if cfg.THRESHOLD_MAX is None else int(cfg.THRESHOLD_MAX)
+    if threshold_cfg.get("enabled", True):
+        t_min = threshold_cfg.get("min")
+        t_max = threshold_cfg.get("max")
+        t_min = 0 if t_min is None else int(t_min)
+        t_max = 65535 if t_max is None else int(t_max)
         thresh = ThresholdFilter()
         ok = thresh.set_value_range(t_min, t_max)
         description.append(f"ThresholdFilter[{t_min}, {t_max}] (ok={ok})")
