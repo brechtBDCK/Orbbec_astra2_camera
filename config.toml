@@ -1,9 +1,5 @@
 # Astra2 configuration (TOML)
-
-[run]
-print_info_offline = false
-
-[streams.depth]
+[stream.depth]
 # Use a profile index (0, 1, 2...). Set to -1 to use width/height/fps.
 profile_index = 2
 # Set width/height/fps to 0 to ignore.
@@ -12,7 +8,7 @@ height = 0
 fps = 0
 format = "Y16"
 
-[streams.color]
+[stream.color]
 # Use a profile index (0, 1, 2...). Set to -1 to use width/height/fps.
 profile_index = 1
 # Set width/height/fps to 0 to ignore.
@@ -37,7 +33,7 @@ magnitude = 1
 radius = 1
 
 [filters.temporal]
-enabled = true
+enabled = false
 diff_scale = 0.1
 weight = 0.4
 
@@ -49,22 +45,3 @@ mode = "NEAREST"
 enabled = true
 min = 600
 max = 1000
-
-[display]
-warmup_frames = 50
-show_window = true
-print_interval_s = 1.0
-timeout_ms = 100
-min_depth_mm = 20
-max_depth_mm = 10000
-window_name = "Astra2"
-window_pos_x = 50
-window_pos_y = 50
-auto_scale = true
-
-[capture]
-dir = "captures"
-prefix = "capture"
-rgbd_subdir = "rgbd"
-pointcloud_subdir = "pointcloud"
-calib_json = "camera_intrinsics.json"

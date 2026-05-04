@@ -26,14 +26,17 @@ Edit `config.toml` at the repo root. The main categories are:
 - `streams` (depth/color profile selection)
 - `filters` (depth post‑processing)
 - `display` (preview + warmup)
+- `time_sync` (host->device clock sync)
 - `capture` (output folders + calibration JSON)
 
 ## Key config knobs
 
 - Warmup: `display.warmup_frames` (skip initial frames; helps temporal stability)
+- Time sync: `time_sync.enabled`, `time_sync.interval_s` (reduces timestamp anomaly logs)
 - Depth format: `streams.depth.format = "Y16"` (recommended for filters)
 - Filters: `filters.temporal`, `filters.spatial`, `filters.hole_filling`, `filters.threshold`, etc.
 - Captures: press `s` to save color, depth, pointcloud, and undistorted versions into `captures/`
+- Capture completeness: `capture.require_color = true` prevents depth-only saves when color stream is enabled
 - Capture naming: `capture_000001_*` (auto‑incremented by scanning existing files)
 
 ## Programmatic capture
